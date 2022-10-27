@@ -1,0 +1,51 @@
+# Default values for pelican application
+
+pelican:
+  replicas: 1
+  image:
+    repo: "gcr.io/datametica-public/pelican-byol/pelican"
+    tag: "1.0.23"
+  namespace: "default"
+  service:
+    type: LoadBalancer
+    port: 8080
+    targetPort: 8080
+    # Kubernetes allows traffic from ip's defined in loadBalancerSourceRanges
+    loadBalancerSourceRanges: "114.143.131.82/32"
+  persistence:
+    storageClass: ""
+    size: "20Gi"
+  addonfiles:
+    persistence:
+      storageClass: ""
+      size: "5Gi"
+pelicandb:
+  replicas: 1
+  image:
+    repo: "mysql/mysql-server"
+    tag: "5.7"
+  port: 3306
+  service:
+    annotations: {}
+    type: ClusterIP
+    targetPort: 3306
+  password: pelicanuser@123
+  livenessProbe:
+    initialDelaySeconds: 90
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 90
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  securityContext:
+    enabled: false
+    runAsUser: 999
+    fsGroup: 999
+  persistence:
+    size: 20Gi
+    storageClass: ""

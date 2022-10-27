@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-web
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/component: pelican-web
+    app: pelican-web
+spec:
+  replicas: {{ .Values.pelican.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}
+      app.kubernetes.io/component: pelican-web
+      app: pelican-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}
+        app.kubernetes.io/component: pelican-web
+        app: pelican-web
+    spec:
+      containers:
+        - name: pelican-web
+          image: "{{ .Values.pelican.image.repo }}:{{ .Values.pelican.image.tag }}"
+          imagePullPolicy: Always
+          env:
+            - name: DB_HOST
+              value: "{{ .Release.Name }}-db-service"
+          ports:
+            - containerPort: 8080
+              name: pelicanui-1
+              protocol: TCP
+          volumeMounts:
+          - name: webapps
+            mountPath: /usr/local/tomcat/webapps
+          - name: additional-files
+            mountPath: /usr/local/additional_files/ca_certs
+            subPath: ca_certs
+          - name: additional-files
+            mountPath: /usr/local/additional_files/dbbackup
+            subPath: dbbackup
+          - name: userconfigfresh
+            mountPath: /tmp/userConfigFresh.xml
+            subPath: userConfigFresh.xml
+          - name: setenv-config
+            mountPath: /usr/local/tomcat/bin/setenv.sh
+            subPath: setenv.sh
+          - name: krb5-conf
+            mountPath: /etc/krb5.conf
+            subPath: krb5.conf
+          - name: pelicanlogs
+            mountPath: /usr/local/tomcat/logs/application_logs
+        - name: pelican-logs
+          image: busybox
+          imagePullPolicy: Always
+          args:
+            - /bin/sh
+            - -c
+            - echo waiting for Pelican to be up && while [ ! -f /usr/local/tomcat/logs/application_logs/log.log ]; do sleep 10; done && tail -f /usr/local/tomcat/logs/application_logs/log.log
+          volumeMounts:
+          - mountPath: /usr/local/tomcat/logs/application_logs
+            name: pelicanlogs
+      initContainers:
+      - name: init-mysql
+        image: busybox:1.31
+        command: ['sh', '-c', 'echo -e "Checking for the availability of MySQL POD deployment"; while ! nc -z {{ .Release.Name }}-db-service 3306; do sleep 1; printf "-"; done; echo -e "  >> MySQL DB POD has started";']
+      securityContext:
+        fsGroup: 100
+      volumes:
+      - name: userconfigfresh
+        configMap:
+          name: {{ .Release.Name }}-userconfigfresh
+          defaultMode: 420
+      - name: krb5-conf
+        configMap:
+          name: {{ .Release.Name }}-krb5-conf
+          defaultMode: 0707
+      - name: webapps
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-pelican-web-pvc
+      - name: additional-files
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-pelican-additional-files-pvc
+      - name: setenv-config
+        configMap:
+          defaultMode: 0777
+          name: {{ .Release.Name }}-setenv-config
+      - name: pelicanlogs
+        emptyDir: {}   

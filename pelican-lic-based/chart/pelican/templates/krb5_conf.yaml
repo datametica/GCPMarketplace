@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-krb5-conf
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/component: pelican-web
+data:
+  krb5.conf: |
+    [logging]
+     default = FILE:/var/log/krb5libs.log
+     kdc = FILE:/var/log/krb5kdc.log
+     admin_server = FILE:/var/log/kadmind.log
+
+    [libdefaults]
+    default_realm = EXAMPLE.COM
+    dns_lookup_kdc =
+    dns_lookup_realm =
+    renew_lifetime =
+    ticket_lifetime =
+    renew_lifetime =
+    forwardable =
+    default_tgs_enctypes =
+    default_tkt_enctypes =
+    permitted_enctypes =
+    udp_preference_limit =
+    kdc_timeout =
+    [realms]
+    EXAMPLE.COM = {
+    kdc = hostname.example.com
+    admin_server = hostname.example.com
+    }
+    [domain_realm]
+    .example.com = EXAMPLE.COM
+    example.com = EXAMPLE.COM
