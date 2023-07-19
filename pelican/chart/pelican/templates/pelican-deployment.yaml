@@ -21,47 +21,70 @@ spec:
         app: pelican-web
     spec:
       containers:
-        - name: ubbagent
-          image: "{{ .Values.ubb.image.repo }}:{{ .Values.ubb.image.tag }}"
-          imagePullPolicy: Always
-          env:
-            - name: AGENT_CONFIG_FILE
-              value: "/usr/local/bin/disk-only.yaml"
-            - name: AGENT_STATE_DIR
-              value: "examples/"
-            - name: AGENT_LOCAL_PORT
-              value: "{{ .Values.ubb.port }}"
-          args: ["/usr/local/bin/ubbagent-start"]
-          ports:
-            - containerPort: {{ .Values.ubb.port }}
-              name: ubbagent
-          volumeMounts:
-            - name: agent-config
-              mountPath: /usr/local/bin/disk-only.yaml
-              subPath: disk-only.yaml
         - name: pelican-web
           image: "{{ .Values.pelican.image.repo }}:{{ .Values.pelican.image.tag }}"
           imagePullPolicy: Always
-          command: ["/bin/bash", "-c"]
-          args:
-            - /usr/local/bin/wait_for_db.sh {{ .Release.Name }}-db-service {{ .Values.pelicandb.port }} 90 -- catalina.sh run
+          env:
+            - name: DB_HOST
+              value: "{{ .Release.Name }}-db-service"
           ports:
             - containerPort: 8080
               name: pelicanui-1
               protocol: TCP
-            - containerPort: 9090
-              name: pelicanui-2
-              protocol: TCP
           volumeMounts:
-          - name: pelican-config
-            mountPath: /usr/local/tomcat/webapps/ROOT/WEB-INF/classes/config/application-dev.yml
-            subPath: application-dev.yml
+          - name: webapps
+            mountPath: /usr/local/tomcat/webapps
+          - name: additional-files
+            mountPath: /usr/local/additional_files/ca_certs
+            subPath: ca_certs
+          - name: additional-files
+            mountPath: /usr/local/additional_files/dbbackup
+            subPath: dbbackup
+          - name: userconfigfresh
+            mountPath: /tmp/userConfigFresh.xml
+            subPath: userConfigFresh.xml
+          - name: setenv-config
+            mountPath: /usr/local/tomcat/bin/setenv.sh
+            subPath: setenv.sh
+          - name: krb5-conf
+            mountPath: /etc/krb5.conf
+            subPath: krb5.conf
+          - name: pelicanlogs
+            mountPath: /usr/local/tomcat/logs/application_logs
+        - name: pelican-logs
+          image: busybox
+          imagePullPolicy: Always
+          args:
+            - /bin/sh
+            - -c
+            - echo waiting for Pelican to be up && while [ ! -f /usr/local/tomcat/logs/application_logs/log.log ]; do sleep 10; done && tail -f /usr/local/tomcat/logs/application_logs/log.log
+          volumeMounts:
+          - mountPath: /usr/local/tomcat/logs/application_logs
+            name: pelicanlogs
+      initContainers:
+      - name: init-mariadb
+        image: busybox:1.31
+        command: ['sh', '-c', 'echo -e "Checking for the availability of MariaDB POD deployment"; while ! nc -z {{ .Release.Name }}-db-service 3306; do sleep 1; printf "-"; done; echo -e "  >> MariaDB POD has been started";']
+      securityContext:
+        fsGroup: 100
       volumes:
-      - name: pelican-config
+      - name: userconfigfresh
         configMap:
-          name: {{ .Release.Name }}-pelican-config
+          name: {{ .Release.Name }}-userconfigfresh
           defaultMode: 420
-      - name: agent-config
+      - name: krb5-conf
         configMap:
-          name: {{ .Release.Name }}-ubbagent-config
-          defaultMode: 420
+          name: {{ .Release.Name }}-krb5-conf
+          defaultMode: 0707
+      - name: webapps
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-pelican-web-pvc
+      - name: additional-files
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-pelican-additional-files-pvc
+      - name: setenv-config
+        configMap:
+          defaultMode: 0777
+          name: {{ .Release.Name }}-setenv-config
+      - name: pelicanlogs
+        emptyDir: {}   

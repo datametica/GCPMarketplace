@@ -20,25 +20,37 @@ spec:
       - name: pelican-db
         image: "{{ .Values.pelicandb.image.repo }}:{{ .Values.pelicandb.image.tag }}"
         imagePullPolicy: Always
+        args:
+          - "--ignore-db-dir=lost+found"
         env:
-        - name: MYSQL_ROOT_PASSWORD
-          value: {{ .Release.Name }}-pelicandb-secret
+           - name: MARIADB_ROOT_PASSWORD
+             valueFrom:
+               secretKeyRef:
+                 key: MARIADB_ROOT_PASSWD
+                 name: {{ .Release.Name }}-secret
+           - name: MARIADB_USER
+             value: pelicanuser
+           - name: MARIADB_PASSWORD
+             valueFrom:
+               secretKeyRef:
+                  name: {{ .Release.Name }}-secret
+                  key: MARIADB_PELICAN_PASSWD    
         ports:
-        - name: mysql
+        - name: mariadb
           containerPort: {{ .Values.pelicandb.port }}
         volumeMounts:
-        - name: pelican-db-config 
-          mountPath: /docker-entrypoint-initdb.d/pelican_db_init.sh
-          subPath: pelican_db_init.sh
-        - name: mysql-data
+        - name: mariadb-data
           mountPath: /var/lib/mysql
+        - name: init-db
+          mountPath: /docker-entrypoint-initdb.d/init-db.sql
+          subPath: init-db.sql
         livenessProbe:
           exec:
             command:
             - mysqladmin
             - ping
             - -h
-            - localhost
+            - 127.0.0.1
           initialDelaySeconds: {{ .Values.pelicandb.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.pelicandb.livenessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.pelicandb.livenessProbe.timeoutSeconds }}
@@ -50,17 +62,28 @@ spec:
             - mysqladmin
             - ping
             - -h
-            - localhost
+            - 127.0.0.1
           initialDelaySeconds: {{ .Values.pelicandb.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.pelicandb.readinessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.pelicandb.readinessProbe.timeoutSeconds }}
           successThreshold: {{ .Values.pelicandb.readinessProbe.successThreshold }}
           failureThreshold: {{ .Values.pelicandb.readinessProbe.failureThreshold }}
-      restartPolicy: Always    
+      restartPolicy: Always
       volumes:
-      - name: pelican-db-config
+      - name: init-db
         configMap:
-          name: {{ .Release.Name }}-pelican-db-config
+          name: {{ .Release.Name }}-init-db
           defaultMode: 420
-      - name: mysql-data
-        emptyDir: {}    
+  volumeClaimTemplates:
+  - metadata:
+      name: mariadb-data
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}
+        app.kubernetes.io/component: pelican-db
+    spec:
+      resources:
+        requests:
+          storage: {{ .Values.pelicandb.persistence.size }}
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: {{ .Values.pelican.persistence.storageClass }}
