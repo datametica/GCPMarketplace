@@ -5,6 +5,8 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}
   annotations:
+    kubernetes-engine.cloud.google.com/icon: >-
+      data:image/png;base64,{{ .Files.Get "logo.png" | b64enc }}
     marketplace.cloud.google.com/deploy-info: '{"partner_id": "click-to-deploy-containers", "product_id": {{ .Chart.Name | quote }}, "partner_name": "Google Click to Deploy"}'
 spec:
   descriptor:
@@ -16,49 +18,40 @@ spec:
       This automation in data validation ensures confidence in decommissioning of existing Legacy Warehouses.
 
       # Support
-      Google does not offer support for this solution. However, community support is available on
-      Additional support is available on the [official Datametica website](https://www.datametica.com//contact-us/).
+      For support for this solution please connect to Datametica support team
+      [official Datametica website](https://www.datametica.com//contact-us/).
 
     maintainers:
-      - name: Datametica Pelican Click to Deploy
-        url: https://cloud.google.com/solutions/#click-to-deploy
+      - name: Datametica Pelican Team
+        email: pelican@datametica.com
     links:
       - description: 'User Guide: Google Click to Deploy Pelican'
-        url: https://github.com/datametica/GCPMarketplace/tree/master/pelican/README.md
+        url: https://github.com/datametica/GCPMarketplace/blob/master/pelican/README.md
     notes: |-
-      # Get authentication credentials for the cluster
+        ## Get authentication credentials for the cluster
+
         ```shell
         gcloud container clusters get-credentials [CLUSTER_NAME] --zone [CLUSTER_ZONE]
         ```
         where:
         * `[CLUSTER_NAME]` is the name of the cluster for this app
         * `[CLUSTER_ZONE]` is the zone in which the cluster is operating
+
         For more information, visit
-        [the following documentation]
-        (https://cloud.google.com/kubernetes-engine/docs/quickstart#get_authentication_credentials_for_the_cluster).
-        {{ if .Values.enablePublicServiceAndIngress }}
-        # Open your Pelican! site
+        [the following documentation](https://cloud.google.com/kubernetes-engine/docs/quickstart#get_authentication_credentials_for_the_cluster).
+
+        ## Open your Pelican! site
         To get the external IP of your Pelican! site, use the following command:
 
         ```
-        SERVICE_IP=$(kubectl get ingress {{ .Release.Name }}-pelican-ingress \
-          --namespace {{ .Release.Namespace }} \
-          --output jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        SERVICE_IP=$(kubectl get svc {{ .Release.Name }}-web-service
+        --namespace {{ .Release.Namespace }}
+        --output jsonpath='{.status.loadBalancer.service[0].ip}')
+
         echo "https://${SERVICE_IP}/"
+
         ```
 
-        The command outputs the URL of your site.
-        # Update TLS certificate for Pelican!
-        By default, the app uses a self-signed certificate. You can follow the
-        steps in the
-        [Instructions for updating the TLS certificate for Pelican!]
-        (https://github.com/datametica/GCPMarketplace/tree/master/pelican/README.md#update-tls-certificate-for-pelican)
-        section to update it.
-        {{ else }}
-        # Open your Pelican! site
-        Pelican! is exposed in a ClusterIP-only service, `{{ .Release.Name }}-pelican`. To
-        connect to the Pelican! UI, you can either expose a public service endpoint, or keep it
-        private, but connect from you local environment, with `kubectl port-forward`.
         ## Forward Pelican! port in local environment
         You can use the port forwarding feature of `kubectl` to forward Pelican!'s port to your local
         machine. Run the following command in the background:
@@ -66,21 +59,26 @@ spec:
         ```shell
         kubectl port-forward \
           --namespace {{ .Release.Namespace }} \
-          svc/{{ .Release.Name }}-pelican \
+          svc/{{ .Release.Name }}-web-service \
           8080:80
         ```
         Now you can access the Pelican! UI with [http://localhost:8080](http://localhost:8080).
-        {{ end }}
   info:
+    - name: Note
+      value: Please wait for 5 minutes after deployment to see Pelican login page.
     - name: Pelican
       type: Reference
       valueFrom:
         serviceRef:
-          name: "{{ .Release.Name }}-pelican"
+          name: "{{ .Release.Name }}-web-service"
     - name: Forward Pelican Browser port locally
-      value: kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ .Release.Name }}-pelican 8080:80
+      value: kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ .Release.Name }}-web-service 8080:80
     - name: Pelican Browser (local only)
       value: http://localhost:8080/browser/
+    - name: Pelican UI default credentials
+      value: username= superuser@datametica.com password= admin
+    - name: Database username
+      value: username= pelicanuser
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ .Release.Name }}
@@ -95,4 +93,6 @@ spec:
       kind: PersistentVolumeClaim
     - group: v1
       kind: Deployment
+    - group: v1
+      kind: StatefulSet
 
